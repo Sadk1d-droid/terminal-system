@@ -1,0 +1,63 @@
+name: Build ISO
+
+on:
+  push:
+    paths:
+      - 'init.c'
+      - '.github/workflows/iso.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential busybox-static grub-pc-bin grub-efi-amd64-bin grub-common xorriso mtools cpio gzip curl
+
+      - name: Compile and build ISO
+        run: |
+          mkdir -p rootfs/{bin,sbin,etc,proc,sys,dev,root,tmp,usr/bin,usr/sbin} iso/boot/grub
+
+          gcc -static -O2 init.c -o rootfs/init
+          chmod +x rootfs/init
+
+          cp /bin/busybox rootfs/bin/busybox
+          chmod +x rootfs/bin/busybox
+          for cmd in $(/bin/busybox --list); do
+            ln -sf busybox rootfs/bin/$cmd
+          done
+
+          (cd rootfs && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../iso/boot/initrd.img)
+
+          curl -L "https://ubuntu.com" -o iso/boot/vmlinuz
+
+          cat << 'EOF' > iso/boot/grub/grub.cfg
+          set timeout=0
+          set default=0
+          menuentry "terminal" {
+              linux /boot/vmlinuz root=/dev/ram0 rw console=tty0
+              initrd /boot/initrd.img
+          }
+          EOF
+
+          grub-mkrescue -o terminal.iso iso/
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-iso
+          path: terminal.iso
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Terminal OS v1.0.${{ github.run_number }}
+          files: terminal.iso

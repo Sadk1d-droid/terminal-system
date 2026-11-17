@@ -13,7 +13,7 @@
          [ terminal ]
 ```
 
-**terminal** is an independent, ultra-minimalist operating system built from scratch around the Linux kernel and a custom PID 1 `init` system written in pure C (~12.3 MB ISO).
+**terminal** is an independent, ultra-minimalist operating system built from scratch around the Linux kernel and a custom PID 1 `init` system written in pure C (~30MB ISO).
 
 It is **not** a Linux distribution (like Ubuntu or Arch), **not** a derivative, and **not** a guide or book — it is a standalone, self-contained system designed to boot directly into a fast, distraction-free command-line environment without bloatware, display managers, or heavy background services.
 

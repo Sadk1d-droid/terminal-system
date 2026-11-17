@@ -1,0 +1,79 @@
+```text
++------------------------+
+
+| \                      |
+|  \                     |
+|   >                    |
+|  /                     |
+| /   ________           |
++------------------------+
+       [ terminal ]
+```
+
+## Сборка
+
+### 1. Установка зависимостей
+```bash
+sudo apt update
+sudo apt install -y build-essential busybox-static cpio gzip
+```
+
+### 2. Компиляция и упаковка Rootfs
+```bash
+mkdir -p build/rootfs/{bin,sbin,etc,proc,sys,dev,root,tmp,run}
+gcc -static -O2 -Wall src/init.c -o build/rootfs/init
+chmod +x build/rootfs/init
+cp /bin/busybox build/rootfs/bin/busybox
+for cmd in $(build/rootfs/bin/busybox --list); do ln -s /bin/busybox build/rootfs/bin/$cmd 2>/dev/null || true; done
+echo "root:x:0:0:root:/root:/bin/sh" > build/rootfs/etc/passwd
+echo "root::0:0:99999:7:::" > build/rootfs/etc/shadow
+(cd build/rootfs && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs-terminal.cpio.gz)
+```
+
+## Установка на основной ПК (через GRUB)
+
+Эта инструкция добавит **terminal OS** как отдельный пункт в меню загрузки вашего компьютера. Основная система при этом не пострадает.
+
+### 1. Копирование файлов системы в `/boot`
+```bash
+sudo cp /boot/vmlinuz-$(uname -r) /boot/vmlinuz-terminal
+sudo chmod 644 /boot/vmlinuz-terminal
+sudo cp build/initramfs-terminal.cpio.gz /boot/initramfs-terminal.cpio.gz
+```
+
+### 2. Добавление пункта в загрузчик GRUB
+Откройте конфигурацию пользовательских пунктов меню:
+```bash
+sudo nano /etc/grub.d/40_custom
+```
+
+Добавьте в самый конец файла следующий блок (подставьте ваш раздел диска вместо `(hd0,gpt2)`, если нужно — см. примечание ниже):
+```text
+menuentry "terminal OS" {
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    search --no-floppy --file --set=root /boot/vmlinuz-terminal
+    linux /boot/vmlinuz-terminal console=tty0 nomodeset
+    initrd /boot/initramfs-terminal.cpio.gz
+}
+```
+> *Примечание: директива `search --file` автоматически найдет нужный диск и раздел, где лежит файл `/boot/vmlinuz-terminal`, поэтому вручную указывать номера разделов не придется. Если `/boot` у вас вынесен на отдельный раздел, уберите `/boot` из путей (оставьте `/vmlinuz-terminal` и `/initramfs-terminal.cpio.gz`).*
+
+### 3. Применение настроек GRUB
+```bash
+sudo update-grub
+```
+*(Если у вас Fedora/Arch/RHEL вместо Ubuntu/Debian, используйте команду `sudo grub-mkconfig -o /boot/grub/grub.cfg`)*
+
+## Запуск
+1. Перезагрузите компьютер.
+2. В меню GRUB выберите пункт **terminal OS** *(если меню не появляется при старте, удерживайте клавишу `Shift` или нажимайте `Esc` во время включения ПК)*.
+3. Введите данные для подключения к Wi-Fi или нажмите `Enter`, чтобы пропустить.
+
+## Удаление (если понадобится)
+Чтобы убрать систему с ПК, удалите скопированные файлы, сотрите добавленный блок из `/etc/grub.d/40_custom` и обновите загрузчик:
+```bash
+sudo rm /boot/vmlinuz-terminal /boot/initramfs-terminal.cpio.gz
+sudo update-grub
+```
